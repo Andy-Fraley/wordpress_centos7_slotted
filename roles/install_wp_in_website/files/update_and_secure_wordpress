@@ -1,0 +1,25 @@
+#!/bin/bash
+
+if [ -z "$1" ]; then
+    echo "USAGE: update_and_secure_wp <wordpress_directory>"
+    exit 1
+fi
+
+if [ ! -d "$1" ]; then
+    echo 'Directory "$1" does not exist.'
+    exit 1
+fi
+
+# Update Wordpress and its plugins
+/usr/local/bin/wp "--path=$1" core upgrade
+/usr/local/bin/wp "--path=$1" plugin update --all
+
+# (Re)secure Wordpress
+chown apache:apache -R "$1"
+find "$1" -type d -print0 | xargs -0 chmod -c 0755
+find "$1" -type f ! -regex ".*/wp\-content\/wflogs.*" -print0 | xargs -0 chmod -c 0644
+chcon -R -t httpd_sys_content_t "$1"
+chcon -R -t httpd_sys_rw_content_t "$1/wp-content"
+chcon -t httpd_sys_rw_content_t "$1/.htaccess"
+chcon -t httpd_sys_rw_content_t "$1/wp-config.php"
+chcon -t httpd_sys_rw_content_t "$1/wordfence-waf.php"

@@ -103,37 +103,6 @@
   ### END BLOCK 2 #####################################################################################################
 
   #####################################################################################################################
-  # Make sure Wordpress file ownership and permissions are correct
-  #####################################################################################################################
-
-  - name: Ensure proper owner/group on Wordpress files
-    file:
-      path: "{{ webserver.root_directory }}/{{ website_name }}/"
-      state: directory
-      recurse: yes
-      owner: "{{ webserver.user }}"
-      group: "{{ webserver.group }}"
-
-  - name: Ensure Wordpress directories are 755
-    shell: "find {{ webserver.root_directory }}/{{ website_name }} -type d -print0 | xargs -0 chmod -c 0755"
-    register: chmod_result
-    changed_when: "chmod_result.stdout != \"\""
-
-  - name: Ensure Wordpress files are 644 (except those under ~/wp-content/wflogs which are managed by WordFence)
-    shell: find "{{ webserver.root_directory }}/{{ website_name }}" -type f ! -regex ".*/wp\-content\/wflogs.*" -print0 | xargs -0 chmod -c 0644
-    register: chmod_result
-    changed_when: "chmod_result.stdout != \"\""
-
-  - name: Make files SELinux-writeable by webserver so WordFence and WordPress and W3 Total Cache can access them
-    include_role:
-      name: install_wp_in_website/roles/make_web_writeable
-    with_items:
-      - "{{ webserver.root_directory }}/{{ website_name }}/.htaccess"
-      - "{{ webserver.root_directory }}/{{ website_name }}/wordfence-waf.php"
-    loop_control:
-      loop_var: fullpath_filename
-
-  #####################################################################################################################
   # Insert whitelist IPs to allow installation client to access wp-login.php (Wordpress console)
   #####################################################################################################################
 
@@ -216,6 +185,25 @@ RewriteRule ^wp-includes/theme-compat/ - [F,L]\n</IfModule>"
       block: "# Kill PHP Execution\n<Files *.php>\n\tRequire all denied\n</Files>"
       marker: "# {mark} ANSIBLE MANAGED BLOCK - Prevent PHP access in ~/wp-content/uploads"
 
-  when: wordpress is defined and wordpress.install is defined and wordpress.install
+  - name: Ensure /root/bin present
+    file:
+      path: /root/bin
+      state: directory
+      mode: 0755
+      owner: root
+      group: root
+
+  - name: Copy 'update and secure secure wordpress' script to server
+    copy:
+      src: secure_wp
+      dest: /root/bin/update_and_secure_wp
+      owner: root
+      group: root
+      mode: 755
+
+  - name: Run 'update and secure wordpress' script on server
+    command: /root/bin/update_and_secure_wp "{{ webserver.root_directory }}/{{ website_name }}"
+
+when: wordpress is defined and wordpress.install is defined and wordpress.install
 
 ### END BLOCK 1 #######################################################################################################

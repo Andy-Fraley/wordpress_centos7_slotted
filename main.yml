@@ -1,0 +1,34 @@
+---
+- name: Base configuration (as root) which sets up deploy user and changes SSH port and SSH user access to lock down
+  hosts: base_servers
+  vars:
+    ansible_sudo_pass:
+    ansible_port:
+  become: no
+  roles:
+    #- base  # Configure base CentOS 7 with deploy user, set up firewall, run non-std SSH port
+  gather_facts: False
+
+- name: Install all other roles as 'deploy'
+  hosts: base_servers
+  become: yes
+  roles:
+    #- emacs  # Gotta have my favorite editor on the system
+    #- chrony  # Keep clock in sync
+    #- yum-cron  # Keep the system up-to-date
+    #- php7_2  # P in lamP
+    #- httpd  # A in lAmp
+    #- mysql5_7  # M in laMp
+    #- web_backup  # Custom-written (ASF) static and WordPress backup/restore facility
+
+- name: Create new website on server (VirtualHost with directory to serve files)
+  hosts: all
+  become: yes
+  roles:
+    #- create_website
+
+- name: Install WordPress in website
+  hosts: all
+  become: yes
+  roles:
+    - install_wp_in_website

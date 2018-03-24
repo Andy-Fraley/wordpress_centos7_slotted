@@ -1,0 +1,8 @@
+site:
+  full_domain_name: test.vc-sampledomain1.com # Match incoming accesses to this domain to this website
+  backup:  # Set up backups for this website for daily on hour/minute specified and notify email address when complete
+    hour: 2
+    minute: 15
+    notify: email@domain.com
+
+# Nothing specified for wordpress, so not installed

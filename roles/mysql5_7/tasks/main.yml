@@ -1,0 +1,45 @@
+---
+- name: Add MySQL yum repository
+  yum:
+    name: http://dev.mysql.com/get/mysql57-community-release-el7-9.noarch.rpm
+
+- name: Install MySQL 5.7
+  yum: name={{ item }} state=latest
+  with_items:
+  - mysql-community-server
+  - MySQL-python
+  notify: restart mysqld
+
+- name: Force mysqld restart as user setup requires running DB
+  meta: flush_handlers
+
+- name: Lookup temporary MySQL root password assigned when DB initialized first time
+  shell: grep 'A temporary password is generated for root@localhost' /var/log/mysqld.log | awk '{print $NF}'
+  changed_when: false
+  register: temp_password
+
+- name: Create script to change MySQL root password
+  template:
+    src: change_mysql_root_password.j2
+    dest: /root/change_mysql_root_password
+    owner: root
+    group: root
+    mode: 755
+  when: temp_password.stdout != ""
+
+- name: Run script to change MySQL root password
+  command: /root/change_mysql_root_password
+  when: temp_password.stdout != ""
+
+- name: Delete script to change MySQL root password
+  file:
+    path: /root/change_mysql_root_password
+    state: absent
+  when: temp_password.stdout != ""
+
+- name: Delete temp password line from /var/log/mysqld.log file
+  lineinfile:
+    dest: /var/log/mysqld.log
+    regexp: 'A temporary password is generated for root@localhost'
+    state: absent
+  when: temp_password.stdout != ""

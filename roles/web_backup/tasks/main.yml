@@ -1,0 +1,27 @@
+---
+- name: Make sure git and pip are installed
+  yum: name={{ item }} state=latest
+  with_items:
+  - git
+  - python-pip
+
+- name: Install Python packages required by web_backup using pip
+  pip: name={{ item }} state=latest
+  with_items:
+  - boto3
+  - pytz
+
+- name: Pull latest web_backup repo into root user home directory
+  git: repo=https://github.com/Andy-Fraley/web_backup.git version=master
+    dest="/root/web_backup"
+
+- name: Create tmp directory under web_backup
+  file:
+    path: "/root/web_backup/tmp"
+    state: directory
+
+- name: Create web_backup.ini under web_backup
+  copy:
+    src: web_backup.ini.vault
+    dest: "/root/web_backup/web_backup.ini"
+    decrypt: yes

@@ -1,0 +1,22 @@
+#######################################################################################################################
+# Make sure Wordpress file ownership and permissions are correct (by pushing script to server and running it)
+#######################################################################################################################
+
+- name: Ensure /root/bin present
+  file:
+    path: /root/bin
+    state: directory
+    mode: 0755
+    owner: root
+    group: root
+
+- name: Copy 'secure wordpress' script to server
+  template:
+    src: secure_wp.j2
+    dest: /root/bin/secure_wp
+    owner: root
+    group: root
+    mode: 755
+
+- name: Run 'secure wordpress' script on server
+  command: /root/bin/secure_wp

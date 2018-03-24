@@ -1,0 +1,10 @@
+<VirtualHost *:80>
+    Redirect / https://{{ site.full_domain_name }}/
+</VirtualHost>
+
+<VirtualHost *:443>
+    Redirect / https://{{ site.full_domain_name }}/
+    SSLEngine on
+    SSLCertificateFile {{ ssl_cert_file_var }}
+    SSLCertificateKeyFile {{ ssl_key_file_var }}
+</VirtualHost>

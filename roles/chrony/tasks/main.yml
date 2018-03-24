@@ -1,0 +1,10 @@
+---
+- name: Set timezone to America/New_York.
+  timezone:
+    name: America/New_York
+
+- name: Ensure Chrony is running and enabled at system start.
+  service:
+    name: chronyd
+    state: started
+    enabled: yes

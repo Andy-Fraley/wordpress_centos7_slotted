@@ -1,0 +1,270 @@
+---
+- name: Check if WordPress already installed
+  stat:
+    path: "{{ wordpress.root_directory }}/wp-blog-header.php"
+  register: wordpress_file
+
+# The WordPress configuration tasks in the block below will only execute if WordPress was downloaded above
+
+### BEGIN BLOCK #######################################################################################################
+
+- block:
+
+  - name: Clean out {{ wordpress.root_directory }} directory
+    shell: "rm -rf {{ wordpress.root_directory }}/*"
+
+  - name: Download and expand WordPress
+    unarchive:
+      src: https://wordpress.org/latest.tar.gz
+      dest: "{{ wordpress.root_directory }}"
+      remote_src: True
+
+  - name: Move WordPress files up a level so they're directly under {{ wordpress.root_directory }}/
+    shell: "mv {{ wordpress.root_directory }}/wordpress/* {{ wordpress.root_directory }}/"
+    args:
+      removes: "{{ wordpress.root_directory }}/wordpress/index.php"
+      creates: "{{ wordpress.root_directory }}/index.php"
+
+  - name: Remove empty {{ wordpress.root_directory }}/wordpress directory...artifact from WordPress download and unzip
+    file:
+      path: "{{ wordpress.root_directory }}/wordpress"
+      state: absent
+
+  - name: Fetch random salts for WordPress config
+    local_action: command curl https://api.wordpress.org/secret-key/1.1/salt/
+    register: wp_salt
+    become: no
+
+  - name: Update WordPress config file from template
+    template:
+      src: wp-config.php.j2
+      dest: "{{ wordpress.root_directory }}/wp-config.php"
+
+  - name: Drop wordpress database
+    mysql_db:
+      name: "{{ db.wp_name }}"
+      state: absent
+      login_password: "{{ db.root_password }}"
+
+  - name: (Re)Create WordPress database
+    mysql_db:
+      name: "{{ db.wp_name }}"
+      state: present
+      login_password: "{{ db.root_password }}"
+
+  - name: Create WordPress database user
+    mysql_user:
+      name: "{{ db.wp_user }}"
+      password: "{{ db.wp_password }}"
+      priv: '{{ db.wp_name }}.*:ALL'
+      host: 'localhost'
+      state: present
+      login_password: "{{ db.root_password }}"
+
+  - name: Check if wp-cli installed
+    stat:
+      path: /usr/local/bin/wp
+    register: wp_cli
+
+  - name: Retrieve wp-cli
+    get_url:
+      url: https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+      dest: /usr/local/bin
+    when: not wp_cli.stat.exists
+
+  - name: Rename wp-cli
+    command: mv /usr/local/bin/wp-cli.phar /usr/local/bin/wp
+    when: not wp_cli.stat.exists
+
+  - name: Change wp(-cli) to executable
+    file:
+      path: /usr/local/bin/wp
+      owner: root
+      group: root
+      mode: 0755
+
+  - name: Make sure host_protocol is defined (can be set for host in inventory file)
+    set_fact: host_protocol="http"
+    when: host_protocol is undefined
+
+  - name: Make sure host_domain is defined (can be set for host in inventory file)
+    set_fact: host_domain="{{ inventory_hostname }}"
+    when: host_domain is undefined
+
+  - name: Update httpd.conf from template
+    template:
+      src: httpd.conf.j2
+      dest: /etc/httpd/conf/httpd.conf
+      owner: root
+      group: root
+      mode: 0644
+    notify:
+    - restart httpd
+
+  when:
+    not wordpress_file.stat.exists
+
+### END BLOCK #########################################################################################################
+
+#######################################################################################################################
+# Make sure Wordpress file ownership and permissions are correct
+#######################################################################################################################
+
+- name: Ensure proper owner/group on Wordpress files
+  file:
+    path: "{{ wordpress.root_directory }}/"
+    state: directory
+    recurse: yes
+    owner: "{{ webserver.user }}"
+    group: "{{ webserver.group }}"
+
+- name: Ensure Wordpress directories are 755
+  shell: "find {{ wordpress.root_directory }} -type d -print0 | xargs -0 chmod -c 0755"
+  register: chmod_result
+  changed_when: "chmod_result.stdout != \"\""
+
+- name: Ensure Wordpress files are 644 (except those under ~/wp-content/wflogs which are managed by WordFence)
+  shell: find "{{ wordpress.root_directory }}" -type f ! -regex ".*/wp\-content\/wflogs.*" -print0 | xargs -0 chmod -c 0644
+  register: chmod_result
+  changed_when: "chmod_result.stdout != \"\""
+
+- name: Make files SELinux-writeable by webserver so WordFence and WordPress and W3 Total Cache can access them
+  include_role:
+    name: wordpress/roles/make_web_writeable
+  with_items:
+    - "{{ wordpress.root_directory }}/.htaccess"
+    - "{{ wordpress.root_directory }}/wordfence-waf.php"
+  loop_control:
+    loop_var: fullpath_filename
+
+#######################################################################################################################
+# Insert whitelist IPs to allow installation client to access wp-login.php (Wordpress console)
+#######################################################################################################################
+
+- name: Redo setup without doing 'become' to pick up SSH connection details
+  setup:
+  become: no
+
+- name: Stash away 'my_local_ip' from facts
+  set_fact:
+    my_local_ip: "{{ ansible_env['SSH_CLIENT'].split()[0] }}"
+
+- name: Get my public IP address
+  local_action: command curl http://ipecho.net/plain
+  register: my_public_ip
+  become: no
+  changed_when: False
+
+- name: Check whether <Files wp-login.php... block exists in .htaccess
+  command: grep \<Files\ wp-login\.php "{{ wordpress.root_directory }}"/.htaccess
+  check_mode: no
+  ignore_errors: True
+  changed_when: False
+  register: check_for_block
+
+- name: Make sure <Files wp-login.php... block exists in .htaccess
+  blockinfile:
+    dest: "{{ wordpress.root_directory }}/.htaccess"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - Whitelist IPs for wp-login.php access"
+    content: "<Files wp-login.php>\n
+\tOrder deny,allow\n
+\t# These IP addresses can log into admin interface (see whatsmyip.com)\n
+\tDeny from all\n</Files>"
+  when: check_for_block.rc != 0
+
+- name: Add matchable comment line on wp-login block
+  replace:
+    dest: "{{ wordpress.root_directory }}/.htaccess"
+    regexp: '(<Files wp-login.php>[^O]*Order deny,allow)(\n\s+# These.*$)?'
+    replace: '<Files wp-login.php>\n\tOrder deny,allow\n\t# These IP addresses can log into admin interface (see whatsmyip.com)'
+
+- name: Use matchable comment marker line inserted above to trigger insertion of allowed address
+  lineinfile:
+    dest: "{{ wordpress.root_directory }}/.htaccess"
+    insertafter: '# These IP addresses can log into admin interface'
+    regexp: '^\s*Allow from {{ my_public_ip.stdout }}'
+    line: "\tAllow from {{ my_public_ip.stdout }} # Andy Fraley home"
+    state: present
+
+- name: Use matchable comment marker line inserted above to trigger insertion of allowed address
+  lineinfile:
+    dest: "{{ wordpress.root_directory }}/.htaccess"
+    insertafter: '# These IP addresses can log into admin interface'
+    regexp: '^\s*Allow from {{ my_local_ip }}'
+    line: "\tAllow from {{ my_local_ip }} # Andy Fraley local machine"
+    state: present
+
+- name: Check whether <Files wp-config.php... block exists in .htaccess
+  command: grep \<Files\ wp-config\.php "{{ wordpress.root_directory }}"/.htaccess
+  check_mode: no
+  ignore_errors: True
+  changed_when: False
+  register: check_for_block
+
+- name: Insert block into .htaccess to prevent direct access to wp-config.php file
+  blockinfile:
+    dest: "{{ wordpress.root_directory }}/.htaccess"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - Block access to wp-config.php file"
+    content: "<Files wp-config.php>\n
+\tOrder allow,deny\n
+\tDeny from all\n</Files>"
+  when: check_for_block.rc != 0
+
+- name: Check whether "include only" block exists in .htaccess
+  command: grep RewriteRule\ \^wp\-includes "{{ wordpress.root_directory }}"/.htaccess
+  check_mode: no
+  ignore_errors: True
+  changed_when: False
+  register: check_for_block
+
+- name: Insert block into .htaccess to prevent end user from executing any include file directly
+  blockinfile:
+    dest: "{{ wordpress.root_directory }}/.htaccess"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - Block the include-only files"
+    content: "<IfModule mod_rewrite.c>\n
+RewriteEngine On\n
+RewriteBase /\n
+RewriteRule ^wp-admin/includes/ - [F,L]\n
+RewriteRule !^wp-includes/ - [S=3]\n
+RewriteRule ^wp-includes/[^/]+\\.php$ - [F,L]\n
+RewriteRule ^wp-includes/js/tinymce/langs/.+\\.php - [F,L]\n
+RewriteRule ^wp-includes/theme-compat/ - [F,L]\n</IfModule>"
+  when: check_for_block.rc != 0
+
+- name: Ensure ~/wp-content/uploads directory exists
+  file:
+    path: "{{ wordpress.root_directory }}/wp-content/uploads"
+    state: directory
+    owner: "{{ webserver.user }}"
+    group: "{{ webserver.group }}"
+    mode: 0755
+
+- name: Does .htaccess exist in ~/wp-content/uploads directory?
+  stat:
+    path: "{{ wordpress.root_directory }}/wp-content/uploads/.htaccess"
+  register: upload_htaccess
+
+- name: Create ~/wp-content/upload/.htaccess if it doesn't exist
+  file:
+    path: "{{ wordpress.root_directory }}/wp-content/uploads/.htaccess"
+    state: touch
+    owner: "{{ webserver.user }}"
+    group: "{{ webserver.group }}"
+    mode: 0644
+  when: not upload_htaccess.stat.exists is defined or not upload_htaccess.stat.exists
+
+- name: Check whether uploads directory is in place in uploads/.htaccess file
+  command: grep \<Files\ \*\.php\> "{{ wordpress.root_directory }}"/wp-content/uploads/.htaccess
+  check_mode: no
+  ignore_errors: True
+  changed_when: False
+  register: check_for_block
+
+- name: Insert block into ~wp-content/uploads/.htaccess to prevent end user from executing any PHP file in uploads
+  blockinfile:
+    dest: "{{ wordpress.root_directory }}/wp-content/uploads/.htaccess"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - Prevent PHP access in ~/wp-content/uploads"
+    content: "# Kill PHP Execution\n
+<Files *.php>\n
+Deny from all\n</Files>"
+  when: check_for_block.rc != 0

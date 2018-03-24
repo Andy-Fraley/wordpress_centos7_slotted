@@ -1,0 +1,221 @@
+---
+
+### BEGIN BLOCK 1 #####################################################################################################
+
+- block:
+
+  - name: Create string website_name based on full domain name. E.g. test.ingomarchurch.org --> test_ingomarchurch_org
+    local_action: "shell echo \"{{ site.full_domain_name }}\" | sed 's/[^[:alnum:]][^[:alnum:]]*/_/g'"
+    register: website_name_output
+    become: no
+
+  - name: Set website_name
+    set_fact:
+      website_name: "{{ website_name_output.stdout }}"
+
+  - name: Check if WordPress already installed
+    stat:
+      path: "{{ webserver.root_directory }}/{{ website_name }}/wp-blog-header.php"
+    register: wordpress_file
+
+  # The WordPress configuration tasks in the block below will only execute if WordPress was downloaded above
+
+  ### BEGIN BLOCK 2 ###################################################################################################
+
+  - block:
+
+    - name: Clean out {{ webserver.root_directory }}/{{ website_name }} directory
+      shell: "rm -rf {{ webserver.root_directory }}/{{ website_name }}/*"
+
+    - name: Download and expand WordPress
+      unarchive:
+        src: https://wordpress.org/latest.tar.gz
+        dest: "{{ webserver.root_directory }}/{{ website_name }}"
+        remote_src: True
+
+    - name: Move WordPress files up a level so they're directly under {{ webserver.root_directory }}/{{ website_name }}/
+      shell: "mv {{ webserver.root_directory }}/{{ website_name }}/wordpress/* {{ webserver.root_directory }}/{{ website_name }}/"
+      args:
+        removes: "{{ webserver.root_directory }}/{{ website_name }}/wordpress/index.php"
+        creates: "{{ webserver.root_directory }}/{{ website_name }}/index.php"
+
+    - name: Remove empty {{ webserver.root_directory }}/{{ website_name }}/wordpress directory...artifact from WordPress download and unzip
+      file:
+        path: "{{ webserver.root_directory }}/{{ website_name }}/wordpress"
+        state: absent
+
+    - name: Fetch random salts for WordPress config
+      local_action: command curl https://api.wordpress.org/secret-key/1.1/salt/
+      register: wp_salt
+      become: no
+
+    - name: Update WordPress config file from template
+      template:
+        src: wp-config.php.j2
+        dest: "{{ webserver.root_directory }}/{{ website_name }}/wp-config.php"
+
+    - name: Drop wordpress database
+      mysql_db:
+        name: "wp_{{ website_name }}"
+        state: absent
+        login_password: "{{ db.root_password }}"
+
+    - name: (Re)Create WordPress database
+      mysql_db:
+        name: "wp_{{ website_name }}"
+        state: present
+        login_password: "{{ db.root_password }}"
+
+    - name: Ensure WordPress database user wp_user exists and has access to wp_xxx database for this site
+      mysql_user:
+        name: "{{ db.wp_user }}"
+        password: "{{ db.wp_password }}"
+        append_privs: yes
+        priv: 'wp_{{ website_name }}.*:ALL'
+        host: 'localhost'
+        state: present
+        login_password: "{{ db.root_password }}"
+
+    - name: Check if wp-cli installed
+      stat:
+        path: /usr/local/bin/wp
+      register: wp_cli
+
+    - name: Retrieve wp-cli
+      get_url:
+        url: https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+        dest: /usr/local/bin
+      when: not wp_cli.stat.exists
+
+    - name: Rename wp-cli
+      command: mv /usr/local/bin/wp-cli.phar /usr/local/bin/wp
+      when: not wp_cli.stat.exists
+
+    - name: Change wp(-cli) to executable
+      file:
+        path: /usr/local/bin/wp
+        owner: root
+        group: root
+        mode: 0755
+  
+    when: not wordpress_file.stat.exists
+
+  ### END BLOCK 2 #####################################################################################################
+
+  #####################################################################################################################
+  # Make sure Wordpress file ownership and permissions are correct
+  #####################################################################################################################
+
+  - name: Ensure proper owner/group on Wordpress files
+    file:
+      path: "{{ webserver.root_directory }}/{{ website_name }}/"
+      state: directory
+      recurse: yes
+      owner: "{{ webserver.user }}"
+      group: "{{ webserver.group }}"
+
+  - name: Ensure Wordpress directories are 755
+    shell: "find {{ webserver.root_directory }}/{{ website_name }} -type d -print0 | xargs -0 chmod -c 0755"
+    register: chmod_result
+    changed_when: "chmod_result.stdout != \"\""
+
+  - name: Ensure Wordpress files are 644 (except those under ~/wp-content/wflogs which are managed by WordFence)
+    shell: find "{{ webserver.root_directory }}/{{ website_name }}" -type f ! -regex ".*/wp\-content\/wflogs.*" -print0 | xargs -0 chmod -c 0644
+    register: chmod_result
+    changed_when: "chmod_result.stdout != \"\""
+
+  - name: Make files SELinux-writeable by webserver so WordFence and WordPress and W3 Total Cache can access them
+    include_role:
+      name: install_wp_in_website/roles/make_web_writeable
+    with_items:
+      - "{{ webserver.root_directory }}/{{ website_name }}/.htaccess"
+      - "{{ webserver.root_directory }}/{{ website_name }}/wordfence-waf.php"
+    loop_control:
+      loop_var: fullpath_filename
+
+  #####################################################################################################################
+  # Insert whitelist IPs to allow installation client to access wp-login.php (Wordpress console)
+  #####################################################################################################################
+
+  - name: Redo setup without doing 'become' to pick up SSH connection details
+    setup:
+    become: no
+
+  - name: Stash away 'my_local_ip' from facts
+    set_fact:
+      my_local_ip: "{{ ansible_env['SSH_CLIENT'].split()[0] }}"
+
+  - name: Get my public IP address
+    local_action: command curl http://ipecho.net/plain
+    register: my_public_ip
+    become: no
+    changed_when: False
+
+  - name: Insert block to control wp-login.php access
+    blockinfile:
+      path: "{{ webserver.root_directory }}/{{ website_name }}/.htaccess"
+      block: "<Files wp-login.php>\n\tRequire all denied\n\t# Allowed IPs below\n</Files>"
+      marker: "# {mark} ANSIBLE MANAGED BLOCK - wp-login.php access"
+
+  - name: Add admin IPs as only addresses who can access wp-login.php
+    blockinfile:
+      path: "{{ webserver.root_directory }}/{{ website_name }}/.htaccess"
+      block: "\tRequire ip {{ item.ip }}\n"
+      marker: "\t# {mark} ANSIBLE MANAGED BLOCK - {{ item.desc }}"
+      insertafter: "# Allowed IPs below"
+    with_items: "{{ wordpress.limited_admin_ips }}"
+    when: wordpress.limited_admin_ips is defined
+
+  - name: Open access to wp-login.php (if limited admin IPs list not defined)
+    blockinfile:
+      path: "{{ webserver.root_directory }}/{{ website_name }}/.htaccess"
+      block: "\t# All IPs allowed\n"
+      marker: "\t# {mark} ANSIBLE MANAGED BLOCK - {{ item.desc }}"
+      insertafter: "# Allowed IPs below"
+    with_items: "{{ wordpress.limited_admin_ips }}"
+    when: wordpress.limited_admin_ips is not defined
+
+  - name: Insert block into .htaccess to prevent direct access to wp-config.php file
+    blockinfile:
+      path: "{{ webserver.root_directory }}/{{ website_name }}/.htaccess"
+      block: "<Files wp-config.php>\n\tRequire all denied\n</Files>"
+      marker: "# {mark} ANSIBLE MANAGED BLOCK - Block access to wp-config.php file"
+
+  - name: Insert block into .htaccess to prevent end user from executing any include file directly
+    blockinfile:
+      path: "{{ webserver.root_directory }}/{{ website_name }}/.htaccess"
+      block: "<IfModule mod_rewrite.c>\n
+RewriteEngine On\n
+RewriteBase /\n
+RewriteRule ^wp-admin/includes/ - [F,L]\n
+RewriteRule !^wp-includes/ - [S=3]\n
+RewriteRule ^wp-includes/[^/]+\\.php$ - [F,L]\n
+RewriteRule ^wp-includes/js/tinymce/langs/.+\\.php - [F,L]\n
+RewriteRule ^wp-includes/theme-compat/ - [F,L]\n</IfModule>"
+      marker: "# {mark} ANSIBLE MANAGED BLOCK - Block the include-only files"
+
+  - name: Ensure ~/wp-content/uploads directory exists
+    file:
+      path: "{{ webserver.root_directory }}/{{ website_name }}/wp-content/uploads"
+      state: directory
+      owner: "{{ webserver.user }}"
+      group: "{{ webserver.group }}"
+      mode: 0755
+
+  - name: Create ~/wp-content/upload/.htaccess if it doesn't exist
+    file:
+      path: "{{ webserver.root_directory }}/{{ website_name }}/wp-content/uploads/.htaccess"
+      state: touch
+      owner: "{{ webserver.user }}"
+      group: "{{ webserver.group }}"
+      mode: 0644
+
+  - name: Insert block into ~wp-content/uploads/.htaccess to prevent end user from executing any PHP file in uploads
+    blockinfile:
+      path: "{{ webserver.root_directory }}/{{ website_name }}/wp-content/uploads/.htaccess"
+      block: "# Kill PHP Execution\n<Files *.php>\n\tRequire all denied\n</Files>"
+      marker: "# {mark} ANSIBLE MANAGED BLOCK - Prevent PHP access in ~/wp-content/uploads"
+
+  when: wordpress is defined and wordpress.install is defined and wordpress.install
+
+### END BLOCK 1 #######################################################################################################

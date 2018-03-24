@@ -1,0 +1,86 @@
+- name: Set up defaults
+  set_fact:
+    ssl_cert_file_var: "/etc/pki/tls/certs/localhost.crt"
+    ssl_key_file_var: "/etc/pki/tls/private/localhost.key"
+
+- name: Create string website_name based on full domain name. E.g. test.ingomarchurch.org --> test_ingomarchurch_org
+  local_action: "shell echo \"{{ site.full_domain_name }}\" | sed 's/[^[:alnum:]][^[:alnum:]]*/_/g'"
+  register: website_name_output
+  become: no
+
+- name: Set website_name
+  set_fact:
+    website_name: "{{ website_name_output.stdout }}"
+
+- name: Set SSL Key File
+  set_fact:
+    ssl_key_file_var: "/etc/pki/tls/private/{{ ssl_key_file }}"
+  when: ssl_key_file is defined
+
+- name: Copy SSL Key File
+  copy:
+    src: "{{ ssl_key_file }}"
+    dest: "/etc/pki/tls/private/{{ ssl_key_file }}"
+    owner: root
+    group: root
+    mode: 0644
+  when: ssl_key_file is defined
+  notify: restart httpd
+
+- name: Set SSL Cert File
+  set_fact:
+    ssl_cert_file_var: "/etc/pki/tls/certs/{{ ssl_cert_file }}"
+  when: ssl_cert_file is defined
+
+- name: Copy SSL Cert File
+  copy:
+    src: "{{ ssl_cert_file }}"
+    dest: "/etc/pki/tls/certs/{{ ssl_cert_file }}"
+    owner: root
+    group: root
+    mode: 0644
+  when: ssl_cert_file is defined
+  notify: restart httpd
+
+- name: Install /etc/httpd/conf.d file
+  template:
+    src: site.conf.j2
+    dest: "/etc/httpd/conf.d/_site_{{ website_name }}.conf"
+  notify: restart httpd
+
+- name: Install /etc/httpd/conf.d file indicating default site
+  template:
+    src: site_default.conf.j2
+    dest: "/etc/httpd/conf.d/_site.conf"
+  notify: restart httpd
+  when: site is defined and site.server_default is defined and site.server_default
+
+- name: Ensure HTML files directory in place
+  file:
+    path: "{{ webserver.root_directory }}/{{ website_name }}"
+    state: directory
+    owner: apache
+    group: apache
+    mode: 0755
+    setype: httpd_sys_content_t
+
+- name: Set up web_backup in cron for newly-created slot with email notifications
+  cron:
+    name: "Run web_backup for {{ website_name }} website"
+    hour: "{{ site.backup.hour }}"
+    minute: "{{ site.backup.minute }}"
+    job: "/root/web_backup/web_backup.py --website-name {{ website_name }} --post-to-s3 --delete-zip --notification-emails {{ site.backup.notify }} > /dev/null 2>&1"
+  when: site is defined and site.backup is defined and site.backup.hour is defined and site.backup.minute is defined and site.backup.notify is defined
+
+- name: Set up web_backup in cron for newly-created slot without email notifications
+  cron:
+    name: "Run web_backup for {{ website_name }} website"
+    hour: "{{ site.backup.hour }}"
+    minute: "{{ site.backup.minute }}"
+    job: "/root/web_backup/web_backup.py --website-name {{ website_name }} --post-to-s3 --delete-zip > /dev/null 2>&1"
+  when: site is defined and site.backup is defined and site.backup.hour is defined and site.backup.minute is defined and site.backup.notify is not defined
+
+- name: Notify if not setting up backup for site
+  debug:
+    msg: "NOTE: Not setting up backup. Backup parameters not fully defined: site.backup.hour, site.backup.minute, site.backup.notify"
+  when: not (site is defined and site.backup is defined and site.backup.hour is defined and site.backup.minute is defined)

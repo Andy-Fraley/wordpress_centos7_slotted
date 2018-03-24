@@ -1,0 +1,12 @@
+site:
+  full_domain_name: vc-sampledomain1.com # Match incoming accesses to this domain to this website
+  server_default: true # If server reached by IP address or unknown full domain, should they redirect to this website?
+  backup:  # Set up backups for this website for daily on hour/minute specified and notify email address when complete
+    hour: 2
+    minute: 0
+    notify: email@domain.com
+
+wordpress:
+  install: true # wordpress.install must be specified and 'true' to do Wordpress install in this website
+  limited_admin_ips: # If want to restrict Wordpress admin GUI to IPs, list them below
+  - { ip: '1.2.3.4', desc: 'Allow Wordpress admin GUI access from this IP address' }

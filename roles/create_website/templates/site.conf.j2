@@ -1,0 +1,17 @@
+<VirtualHost *:80>
+    ServerName {{ site.full_domain_name }}
+    Redirect / https://{{ site.full_domain_name }}/
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName {{ site.full_domain_name }}
+    DocumentRoot {{ webserver.root_directory }}/{{ website_name }}
+    SSLEngine on
+    SSLCertificateFile {{ ssl_cert_file_var }}
+    SSLCertificateKeyFile {{ ssl_key_file_var }}
+</VirtualHost>
+
+<Directory "{{ webserver.root_directory }}/{{ website_name }}">
+    # Allow .htaccess within site
+    AllowOverride All
+</Directory>

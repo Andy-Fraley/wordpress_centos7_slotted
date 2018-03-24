@@ -14,7 +14,7 @@ This playbook installs latest stable (as of 3/24/2018) versions of AMP on top of
 
 This Ansible script set is a little different in that it considers hosts "VirtualHosts" in the Apache sense of the
 word.  So when targeted full domain hosts are targeted by the "all" (hosts) clause in main.yml, each target is
-a full domain name like test.fraleys.org and fraleys.org and wilson82.com which all may resolve to the same
+a full domain name like test.domain1.org and domain1.org and domain2.com which all may resolve to the same
 underlying IP address or server.  Thus each install target for creating a new website on the server or installing
 Wordpress in a website on a server is targeting a full domain name associated with a VirtualHost on the target
 server.

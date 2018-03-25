@@ -3,41 +3,41 @@
   file:
     path: /root/bin
     state: directory
-    mode: 0755
     owner: root
     group: root
+    mode: 0755
 
 - name: Copy 'check' script
-  template:
+  copy:
     src: check_httpd_and_mysqld
     dest: /root/bin
     owner: root
     group: root
-    mode: 755
+    mode: 0755
 
 - name: Copy 'restart' script
-  template:
+  copy:
     src: restart_httpd_and_mysqld
     dest: /root/bin
     owner: root
     group: root
-    mode: 755
+    mode: 0755
 
 - name: Copy 'track memory' script
-  template:
+  copy:
     src: track_free_memory
     dest: /root/bin
     owner: root
     group: root
-    mode: 755
+    mode: 0755
 
 - name: Copy check_script logrotate config file
-  template:
+  copy:
     src: check_scripts
     dest: /etc/logrotate.d
     owner: root
     group: root
-    mode: 644
+    mode: 0644
 
 - name: "Cron 'check' script"
   cron:
@@ -60,6 +60,6 @@
     name: Restart httpd and mysqld (reclaim memory)
     hour: "5"
     minute: "1"
-    job: "/root/bin/track_free_memory > /dev/null 2>&1"
+    job: "/root/bin/restart_httpd_and_mysqld > /dev/null 2>&1"
   notify:
   - restart crond

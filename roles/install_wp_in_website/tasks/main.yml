@@ -195,15 +195,15 @@ RewriteRule ^wp-includes/theme-compat/ - [F,L]\n</IfModule>"
 
   - name: Copy 'update and secure secure wordpress' script to server
     copy:
-      src: secure_wp
+      src: update_and_secure_wp
       dest: /root/bin/update_and_secure_wp
       owner: root
       group: root
-      mode: 755
+      mode: 0755
 
   - name: Run 'update and secure wordpress' script on server
     command: /root/bin/update_and_secure_wp "{{ webserver.root_directory }}/{{ website_name }}"
 
-when: wordpress is defined and wordpress.install is defined and wordpress.install
+  when: wordpress is defined and wordpress.install is defined and wordpress.install
 
 ### END BLOCK 1 #######################################################################################################

@@ -5,6 +5,6 @@
 <VirtualHost *:443>
     Redirect / https://{{ site.full_domain_name }}/
     SSLEngine on
-    SSLCertificateFile {{ ssl_cert_file_var }}
-    SSLCertificateKeyFile {{ ssl_key_file_var }}
+    SSLCertificateFile /etc/pki/tls/certs/{{ cert_file_base }}.crt
+    SSLCertificateKeyFile /etc/pki/tls/private/{{ cert_file_base }}.key
 </VirtualHost>

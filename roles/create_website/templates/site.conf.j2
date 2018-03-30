@@ -7,8 +7,8 @@
     ServerName {{ site.full_domain_name }}
     DocumentRoot {{ webserver.root_directory }}/{{ website_name }}
     SSLEngine on
-    SSLCertificateFile {{ ssl_cert_file_var }}
-    SSLCertificateKeyFile {{ ssl_key_file_var }}
+    SSLCertificateFile /etc/pki/tls/certs/{{ cert_file_base }}.crt
+    SSLCertificateKeyFile /etc/pki/tls/private/{{ cert_file_base }}.key
 </VirtualHost>
 
 <Directory "{{ webserver.root_directory }}/{{ website_name }}">

@@ -1,7 +1,29 @@
-- name: Set up defaults
+- name: Copy key file
+  copy:
+    src: "{{ playbook_dir }}/group_vars/{{ cert_file_base }}_certs/files/{{ cert_file_base }}.key.vault"
+    dest: "/etc/pki/tls/private/{{ cert_file_base }}.key"
+    decrypt: yes
+    owner: root
+    group: root
+    mode: 0600
+  notify: restart httpd
+  when: cert_file_base is defined
+
+- name: Copy cert file
+  copy:
+    src: "{{ playbook_dir }}/group_vars/{{ cert_file_base }}_certs/files/{{ cert_file_base }}.crt.vault"
+    dest: "/etc/pki/tls/certs/{{ cert_file_base }}.crt"
+    decrypt: yes
+    owner: root
+    group: root
+    mode: 0600
+  notify: restart httpd
+  when: cert_file_base is defined
+
+- name: Set default cert_file_base
   set_fact:
-    ssl_cert_file_var: "/etc/pki/tls/certs/localhost.crt"
-    ssl_key_file_var: "/etc/pki/tls/private/localhost.key"
+    cert_file_base: "localhost"
+  when: cert_file_base is not defined
 
 - name: Create string website_name based on full domain name. E.g. test.ingomarchurch.org --> test_ingomarchurch_org
   local_action: "shell echo \"{{ site.full_domain_name }}\" | sed 's/[^[:alnum:]][^[:alnum:]]*/_/g'"
@@ -11,36 +33,6 @@
 - name: Set website_name
   set_fact:
     website_name: "{{ website_name_output.stdout }}"
-
-- name: Set SSL Key File
-  set_fact:
-    ssl_key_file_var: "/etc/pki/tls/private/{{ ssl_key_file }}"
-  when: ssl_key_file is defined
-
-- name: Copy SSL Key File
-  copy:
-    src: "{{ ssl_key_file }}"
-    dest: "/etc/pki/tls/private/{{ ssl_key_file }}"
-    owner: root
-    group: root
-    mode: 0644
-  when: ssl_key_file is defined
-  notify: restart httpd
-
-- name: Set SSL Cert File
-  set_fact:
-    ssl_cert_file_var: "/etc/pki/tls/certs/{{ ssl_cert_file }}"
-  when: ssl_cert_file is defined
-
-- name: Copy SSL Cert File
-  copy:
-    src: "{{ ssl_cert_file }}"
-    dest: "/etc/pki/tls/certs/{{ ssl_cert_file }}"
-    owner: root
-    group: root
-    mode: 0644
-  when: ssl_cert_file is defined
-  notify: restart httpd
 
 - name: Install /etc/httpd/conf.d file
   template:
@@ -69,7 +61,7 @@
     name: "Run web_backup for {{ website_name }} website"
     hour: "{{ site.backup.hour }}"
     minute: "{{ site.backup.minute }}"
-    job: "/root/web_backup/web_backup.py --website-name {{ website_name }} --notification-emails {{ site.backup.notify }} --post-to-s3 --delete-zip --upgrade-and-secure-wp > /dev/null 2>&1"
+    job: "/root/web_backup/web_backup.py --website-name {{ website_name }} --notification-emails {{ site.backup.notify }} --post-to-s3 --delete-zip --update-and-secure-wp > /dev/null 2>&1"
   when: site is defined and site.backup is defined and site.backup.hour is defined and site.backup.minute is defined and site.backup.notify is defined
 
 - name: Set up web_backup in cron for newly-created slot without email notifications
@@ -77,7 +69,7 @@
     name: "Run web_backup for {{ website_name }} website"
     hour: "{{ site.backup.hour }}"
     minute: "{{ site.backup.minute }}"
-    job: "/root/web_backup/web_backup.py --website-name {{ website_name }} --post-to-s3 --delete-zip --upgrade-and-secure-wp > /dev/null 2>&1"
+    job: "/root/web_backup/web_backup.py --website-name {{ website_name }} --post-to-s3 --delete-zip --update-and-secure-wp > /dev/null 2>&1"
   when: site is defined and site.backup is defined and site.backup.hour is defined and site.backup.minute is defined and site.backup.notify is not defined
 
 - name: Notify if not setting up backup for site

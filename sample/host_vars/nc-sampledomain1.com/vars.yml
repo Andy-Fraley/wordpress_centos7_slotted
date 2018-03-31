@@ -1,6 +1,6 @@
 site:
   full_domain_name: vc-sampledomain1.com # Match incoming accesses to this domain to this website
-  server_default: true # If server reached by IP address or unknown full domain, should they redirect to this website?
+  server_default: true # If server reached by IP address or unknown full domain, they are redirected to this website
   backup:  # Set up backups for this website for daily on hour/minute specified and notify email address when complete
     hour: 2
     minute: 0

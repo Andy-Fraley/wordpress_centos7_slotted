@@ -1,6 +1,17 @@
+#######################################################################################################################
+# Server name
+#######################################################################################################################
+
+server_file_base: "first_server"
+
+
+#######################################################################################################################
+# Server vault file passthroughs
+#
 # An encrypted vault.yml file must be created in this directory with exact same structure as below except with
 # node names vault_linux (instead of simply "linux") and vault_db (instead of simply "db") and with actual
 # values for each of the listed keys like root_user, root_password, wp_name, etc.
+#######################################################################################################################
 
 linux:
   root_user: "{{ vault_linux.root_user }}"
@@ -19,7 +30,11 @@ webserver:
   group: "apache"
   root_directory: "/var/www"
 
-# Set up for machine access from ansible
+
+#######################################################################################################################
+# Central config for access to this server from Ansible
+#######################################################################################################################
+
 ansible_user: "{{ linux.deploy_user }}"
 ansible_password: "{{ linux.deploy_password }}"
 ansible_port: "{{ linux.ssh_port }}"

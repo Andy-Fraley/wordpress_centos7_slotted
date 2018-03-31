@@ -1,0 +1,67 @@
+#######################################################################################################################
+#
+# Ansible hosts file
+#
+# "nc-" means non-cached (thru CloudFlare) locally-resolved (/etc/hosts) direct-IP access to underlying server
+#
+# Cannot use actual IP addresses because then for example ingomarchurch.org and test.ingomarchurch.org would both
+# resolve to same IP address (52.4.68.132) and be counted by Ansible as the same host target.  But we want
+# ingomarchurch.org and test.ingomarchurch.org to be counted as separate install targets (aka "hosts") by Ansible.
+# And we want to get the actual direct server access IP address and not the one DNS-redirected by CloudFlare.
+# So we set up nc- versions, like nc-ingomarchurch.org and test.nc-ingomarchurch.org and resolve them locally
+# in /etc/hosts
+#
+# This file is only used for organizing (Virtual)hosts into groups and identifying which are base_servers (for full
+# server base and LAMP setup, etc.).  See host_vars for per-server settings.
+#
+#######################################################################################################################
+
+#######################################################################################################################
+# Base servers
+#
+# Machines below are underlying physical/VM hosts.  Base machine config and LAMP install only has to be done once
+# per host (not over and over on each Apache VirtualHost)
+#######################################################################################################################
+
+[base_servers]
+nc-sampledomain1.com
+nc-sampledomain2.org
+
+
+#######################################################################################################################
+# Sites per server
+#
+# These Ansible groups aggregate VirtualHost sites (fully qualified domain name, FQDN, for each) on that server.
+#######################################################################################################################
+
+[first_server]
+nc-sampledomain1.com
+test.nc-sampledomain1.com
+
+[second_server]
+nc-sampledomain2.org
+test.nc-sampledomain2.org
+dev.nc-sampledomain2.org
+nc-sampledomain3.org
+test.nc-sampledomain3.org
+
+
+#######################################################################################################################
+# SSL Cert and Key files
+#
+# These groups group sites by which SSL cert/key apply to that site.  Cert and Key files and the cert_base_name
+# (e.g. "fraleys_org" for all certs/keys for *.fraleys.org sites) can be found under group_vars/xxx_certs
+#######################################################################################################################
+
+[sampledomain1_com_certs]
+nc-sampledomain1.com
+test.nc-sampledomain1.com
+
+[sampledomain2_org_certs]
+nc-sampledomain2.org
+test.nc-sampledomain2.org
+dev.nc-sampledomain2.org
+
+[sampledomain3_org_certs]
+nc-sampledomain3.org
+test.nc-sampledomain3.org

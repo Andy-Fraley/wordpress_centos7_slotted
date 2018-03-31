@@ -21,17 +21,17 @@
     #- php7_2  # P in lamP
     #- httpd  # A in lAmp
     #- mysql5_7  # M in laMp
-    #- web_backup  # Custom-written (ASF) static and WordPress backup/restore facility
+    - web_backup  # Custom-written (ASF) static and WordPress backup/restore facility
     #- check_scripts  # Custom-written (ASF) utilities to restart services and check memory nightly via cron
 
 - name: Create new website on server (VirtualHost with directory to serve files)
   hosts: all
   become: yes
   roles:
-    - create_website
+    #- create_website
 
 - name: Install WordPress in website
   hosts: all
   become: yes
   roles:
-    - install_wp_in_website
+    #- install_wp_in_website

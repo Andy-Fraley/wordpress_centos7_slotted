@@ -20,8 +20,8 @@
     path: "/root/web_backup/tmp"
     state: directory
 
-- name: Create web_backup.ini under web_backup
+- name: Create server-specific web_backup.ini under web_backup on server
   copy:
-    src: web_backup.ini.vault
+    src: "{{ playbook_dir }}/group_vars/{{ server_file_base }}/files/web_backup.ini.vault"
     dest: "/root/web_backup/web_backup.ini"
     decrypt: yes

@@ -3,6 +3,8 @@ vault.yml
 hosts
 *_BAK*
 *~
+#*#
+bak
 /group_vars
 /host_vars
 

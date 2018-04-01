@@ -8,30 +8,30 @@
     ansible_ssh_pass: "{{ linux.root_password }}"
   become: no
   roles:
-    - base  # Configure base CentOS 7 with deploy user, set up firewall, run non-std SSH port
+    #- base  # Configure base CentOS 7 with deploy user, set up firewall, run non-std SSH port
   gather_facts: False
 
 - name: Server package installs (as 'deploy' for these and below)
   hosts: base_servers
   become: yes
   roles:
-    - emacs  # Gotta have my favorite editor on the system
-    - chrony  # Keep clock in sync
-    - yum-cron  # Keep the system up-to-date
-    - php7_2  # P in lamP
+    #- emacs  # Gotta have my favorite editor on the system
+    #- chrony  # Keep clock in sync
+    #- yum-cron  # Keep the system up-to-date
+    #- php7_2  # P in lamP
     - httpd  # A in lAmp
-    - mysql5_7  # M in laMp
-    - web_backup  # Custom-written (ASF) static and WordPress backup/restore facility
-    - check_scripts  # Custom-written (ASF) utilities to restart services and check memory nightly via cron
+    #- mysql5_7  # M in laMp
+    #- web_backup  # Custom-written (ASF) static and WordPress backup/restore facility
+    #- check_scripts  # Custom-written (ASF) utilities to restart services and check memory nightly via cron
 
 - name: Create new websites on server(s) (website aka VirtualHost with directory to serve files)
   hosts: all
   become: yes
   roles:
-    - create_website
+    #- create_website
 
 - name: Install WordPress in websites on server(s)
   hosts: all
   become: yes
   roles:
-    - install_wp_in_website
+    #- install_wp_in_website

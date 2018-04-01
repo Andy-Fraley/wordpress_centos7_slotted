@@ -214,6 +214,13 @@ RewriteRule ^wp-includes/theme-compat/ - [F,L]\n</IfModule>"
   - name: Run 'update and secure wordpress' script on server
     command: /root/bin/update_and_secure_wp "{{ webserver.root_directory }}/{{ website_name }}"
 
+  - name: Ensure glibc.i686 and mod_cloudflare are installed (since this server running WordPress)
+    yum: name={{ item }} state=latest
+    with_items:
+    - glibc.i686
+    - https://www.cloudflare.com/static/misc/mod_cloudflare/centos/mod_cloudflare-el7-x86_64.latest.rpm
+    notify: restart httpd
+
   when: wordpress is defined and wordpress.install is defined and wordpress.install
 
 ### END BLOCK 1 #######################################################################################################

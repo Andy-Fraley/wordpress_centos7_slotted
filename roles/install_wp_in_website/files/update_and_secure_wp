@@ -13,6 +13,7 @@ fi
 # Update Wordpress and its plugins
 /usr/local/bin/wp "--path=$1" core upgrade
 /usr/local/bin/wp "--path=$1" plugin update --all
+/usr/local/bin/wp "--path=$1" theme update --all
 
 # (Re)secure Wordpress
 chown apache:apache -R "$1"

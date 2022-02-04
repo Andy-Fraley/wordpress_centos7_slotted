@@ -1,10 +1,12 @@
 <VirtualHost *:80>
     ServerName {{ site.full_domain_name }}
+    ServerAlias *.{{ site.full_domain_name }}
     Redirect / https://{{ site.full_domain_name }}/
 </VirtualHost>
 
 <VirtualHost *:443>
     ServerName {{ site.full_domain_name }}
+    ServerAlias *.{{ site.full_domain_name }}
     DocumentRoot {{ webserver.root_directory }}/{{ website_name }}
     SSLEngine on
     SSLCertificateFile /etc/pki/tls/certs/{{ cert_file_base }}.crt

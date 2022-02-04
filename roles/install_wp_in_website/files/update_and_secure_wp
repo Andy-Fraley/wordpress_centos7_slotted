@@ -10,10 +10,10 @@ if [ ! -d "$1" ]; then
     exit 1
 fi
 
-# Update Wordpress and its plugins
-/usr/local/bin/wp "--path=$1" core upgrade
-/usr/local/bin/wp "--path=$1" plugin update --all
-/usr/local/bin/wp "--path=$1" theme update --all
+# Update Wordpress and its plugins (as user "apache", webserver account)
+sudo -u apache /usr/local/bin/wp "--path=$1" core upgrade
+sudo -u apache /usr/local/bin/wp "--path=$1" plugin update --all
+sudo -u apache /usr/local/bin/wp "--path=$1" theme update --all
 
 # (Re)secure Wordpress
 chown apache:apache -R "$1"
